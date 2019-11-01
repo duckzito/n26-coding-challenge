@@ -2,22 +2,19 @@ package com.n26.repositories.impl;
 
 import com.n26.model.Statistics;
 import com.n26.model.Transaction;
+import com.n26.repositories.StatisticsCache;
 import com.n26.repositories.TransactionCache;
-import com.n26.utils.StatisticsMapsUtils;
 import com.n26.validators.StatisticsValidator;
 import com.n26.validators.TransactionValidator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Repository;
 
 import javax.annotation.PostConstruct;
-import java.util.HashMap;
+import java.math.BigDecimal;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static com.n26.utils.StatisticsMapsUtils.toStatisticMap;
-import static com.n26.utils.StatisticsMapsUtils.updateExisting;
 
 /**
  * Cache implementation based on {@link ConcurrentHashMap}
@@ -25,14 +22,14 @@ import static com.n26.utils.StatisticsMapsUtils.updateExisting;
 
 @Slf4j
 @Repository
-public class TransactionMapCacheImpl implements TransactionCache {
+public class TransactionMapCacheImpl implements TransactionCache, StatisticsCache {
 
 	private final Object lockObj = new Object();
 
 	private int size = 60;
 
 	//package visibility for testing purposes
-	ConcurrentHashMap<Integer, Map<String, Object>> concurrentHashMap;
+	ConcurrentHashMap<Integer, Statistics> concurrentHashMap;
 
 	@Autowired
 	private StatisticsValidator validator;
@@ -45,31 +42,33 @@ public class TransactionMapCacheImpl implements TransactionCache {
 		log.info("Initializing cache");
 		concurrentHashMap = new ConcurrentHashMap(size);
 		for (int i = 0; i < size; i++) {
-			concurrentHashMap.put(i, new HashMap<>());
+			concurrentHashMap.put(i, new Statistics());
 		}
 	}
 
+	/**
+	 * Update Method
+	 * Used for updating a {@Link Statistics} with a {@Link Transaction}
+	 * @param position
+	 * @param transaction
+	 */
+	@Override
+	public void update(int position, final Statistics statistics, Transaction transaction) {
+		//final Statistics statistics = concurrentHashMap.get(position);
+		concurrentHashMap.put(position, Statistics.updateExisting(statistics, transaction));
+	}
 
 	/**
 	 * Put Method
 	 * Used for storing a new {@Link Transaction}
+	 * @param position
 	 * @param transaction
 	 */
 	@Override
-	public void put(Transaction transaction) {
-		transactionValidator.validateTransaction(transaction);
-
-		final int position = this.getPositionWindow(transaction);
-		final Map<String, Object> statistics = concurrentHashMap.get(position);
-
-		synchronized (lockObj) {
-			if (!statistics.isEmpty() && validator.isValidStatistics((long) statistics.get("timestamp"))) {
-				concurrentHashMap.put(position, updateExisting(statistics, transaction));
-			} else {
-				concurrentHashMap.put(position, toStatisticMap(transaction));
-			}
-		}
+	public void insert(int position, Transaction transaction) {
+		concurrentHashMap.put(position, Statistics.buildFrom(transaction));
 	}
+
 
 	/**
 	 * Get Statistic
@@ -81,9 +80,14 @@ public class TransactionMapCacheImpl implements TransactionCache {
 		log.info("Calculating statistics");
 		return concurrentHashMap.values().parallelStream()
 				.filter(this::isValid)
-				.reduce(StatisticsMapsUtils::mergeStatistics)
-				.map(Statistics::build)
+				.reduce(Statistics::mergeStatistics)
+				.map( s -> new Statistics(s.getSum(), s.getAvg(), s.getMax(), s.getMin(), s.getCount()))
 				.orElseGet(Statistics::new);
+	}
+
+	@Override
+	public Statistics get(int position) {
+		return concurrentHashMap.get(position);
 	}
 
 
@@ -97,17 +101,11 @@ public class TransactionMapCacheImpl implements TransactionCache {
 		log.info("Cache cleared");
 	}
 
-	private int getPositionWindow(final Transaction transaction) {
-		final long currentTime = System.currentTimeMillis();
-		final int position = (int) ((currentTime - transaction.getTimestampInMillis()) / 1000);
-		return position % size;
-	}
 
-	private boolean isValid(Map<String, Object> statistics) {
-		if (statistics.isEmpty()) return false;
+	private boolean isValid(Statistics statistics) {
 		synchronized (lockObj) {
-			Long timestamp = (Long) statistics.get("timestamp");
-			return validator.isValidStatistics(timestamp);
+			Long timestamp = statistics.getTimestampInMillis();
+			return validator.isValidStatistics(timestamp) && statistics.getSum().compareTo(BigDecimal.ZERO) != 0;
 		}
 	}
 }

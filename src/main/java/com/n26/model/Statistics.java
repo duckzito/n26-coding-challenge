@@ -5,13 +5,17 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.n26.config.BigDecimalToStringJsonSerializer;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+import java.util.HashMap;
 import java.util.Map;
-
-import static com.n26.utils.StatisticsMapsUtils.*;
 
 /**
  * Statistic Business Object
@@ -25,7 +29,15 @@ import static com.n26.utils.StatisticsMapsUtils.*;
 		"min",
 		"count"
 })
-public class Statistics {
+public @Getter @Setter class Statistics {
+
+	public static final String SUM = "sum";
+	public static final String MIN = "min";
+	public static final String MAX = "max";
+	public static final String AVG = "avg";
+	public static final String COUNT = "count";
+	public static final String TIMESTAMP = "timestamp";
+
 
 	@JsonSerialize(using = BigDecimalToStringJsonSerializer.class)
 	private BigDecimal sum;
@@ -57,6 +69,16 @@ public class Statistics {
 		this.min = min;
 		this.count = count;
 	}
+
+	public Statistics(BigDecimal sum, BigDecimal avg, BigDecimal max, BigDecimal min, Long count, LocalDateTime timestamp) {
+		this();
+		this.sum = sum;
+		this.avg = avg;
+		this.max = max;
+		this.min = min;
+		this.count = count;
+		this.timestamp = timestamp;
+	}
 	public Long getCount() {
 		return count;
 	}
@@ -66,57 +88,91 @@ public class Statistics {
 		return Duration.between(this.timestamp, LocalDateTime.now()).toMillis();
 	}
 
-	public static Statistics build(Map<String, Object> statisticMap) {
-		BigDecimal sum = (BigDecimal) statisticMap.get(SUM);
-		BigDecimal min = (BigDecimal) statisticMap.get(MIN);
-		BigDecimal max = (BigDecimal) statisticMap.get(MAX);
-		BigDecimal avg = (BigDecimal) statisticMap.get(AVG);
-		long count = (Long) statisticMap.get(COUNT);
-
-		return new Statistics(sum, avg, max, min, count);
+	@JsonIgnore
+	public Long getTimestampInMillis() {
+		return this.timestamp.toInstant(ZoneOffset.UTC).toEpochMilli();
 	}
 
-	public BigDecimal getSum() {
-		return sum;
+	/**
+	 * Returns a {@link Map<String, Object>} that represent a {@link Transaction}
+	 *
+	 * @return Map<String, Object>
+	 */
+	public static Statistics buildFrom(final Transaction transaction) {
+		return new Statistics(transaction.getAmount(),
+				transaction.getAmount(),
+				transaction.getAmount(),
+				transaction.getAmount(),
+				1L,
+				transaction.getTimestamp());
 	}
 
-	public void setSum(BigDecimal sum) {
-		this.sum = sum;
+	/**
+	 * Returns a {@link Map<String, Object>} result of update and existing Statistic with a {@link Transaction}
+	 *
+	 * @return Map<String, Object>
+	 */
+
+	public static Statistics updateExisting(final Statistics statistics, final Transaction transaction) {
+		Map<String, Object> updatedStatistic = new HashMap<>();
+
+		BigDecimal sum = statistics.getSum();
+		BigDecimal min = statistics.getMin();
+		BigDecimal max = statistics.getMax();
+		Long count = statistics.getCount();
+
+		final BigDecimal updatedSum = sum.add(transaction.getAmount());
+		final long updatedCount = count + 1L;
+		final BigDecimal updatedAvg = updatedSum.divide(BigDecimal.valueOf(updatedCount), 2, RoundingMode.HALF_UP);
+
+		BigDecimal updatedMin = transaction.getAmount().min(min);
+		if (min.compareTo(BigDecimal.ZERO) == 0) {
+			updatedMin = updatedMin.add(transaction.getAmount());
+		}
+
+		final BigDecimal updatedMax = transaction.getAmount().max(max);
+
+		//public Statistics(BigDecimal sum, BigDecimal avg, BigDecimal max, BigDecimal min, Long count, LocalDateTime timestamp) {
+		return new Statistics(
+				updatedSum,
+				updatedAvg,
+				updatedMax,
+				updatedMin,
+				updatedCount,
+				transaction.getTimestamp());
 	}
 
-	public BigDecimal getAvg() {
-		return avg;
+	/**
+	 * Returns a {@link Map<String, Object>} result of merge and existing Statistic with another Statistic
+	 *
+	 * @return Map<String, Object>
+	 */
+	public static Statistics mergeStatistics(final Statistics statistics, final Statistics statistics2) {
+
+		BigDecimal sum = statistics.getSum();
+		BigDecimal min = statistics.getMin();
+		BigDecimal max = statistics.getMax();
+		Long count = statistics.getCount();
+
+		BigDecimal sum2 = statistics2.getSum();
+		BigDecimal min2 = statistics2.getMin();
+		BigDecimal max2 = statistics2.getMax();
+		Long count2 = statistics2.getCount();
+		LocalDateTime timestamp = statistics2.getTimestamp();
+
+		BigDecimal updatedSum = sum.add(sum2);
+		long updatedCount = count + count2;
+		BigDecimal updatedAvg = updatedSum.divide(BigDecimal.valueOf(updatedCount), 2, RoundingMode.HALF_UP);
+		BigDecimal updatedMin = min.min(min2);
+		BigDecimal updatedMax = max.max(max2);
+
+		return new Statistics(
+				updatedSum,
+				updatedAvg,
+				updatedMax,
+				updatedMin,
+				updatedCount,
+				timestamp);
 	}
 
-	public void setAvg(BigDecimal avg) {
-		this.avg = avg;
-	}
-
-	public BigDecimal getMax() {
-		return max;
-	}
-
-	public void setMax(BigDecimal max) {
-		this.max = max;
-	}
-
-	public BigDecimal getMin() {
-		return min;
-	}
-
-	public void setMin(BigDecimal min) {
-		this.min = min;
-	}
-
-	public void setCount(Long count) {
-		this.count = count;
-	}
-
-	public LocalDateTime getTimestamp() {
-		return timestamp;
-	}
-
-	public void setTimestamp(LocalDateTime timestamp) {
-		this.timestamp = timestamp;
-	}
 }
