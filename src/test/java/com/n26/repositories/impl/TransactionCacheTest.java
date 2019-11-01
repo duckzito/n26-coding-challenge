@@ -48,39 +48,38 @@ public class TransactionCacheTest {
 		BigDecimal amount = new BigDecimal("300.00");
 
 		final Transaction transaction = new Transaction(amount, LocalDateTime.now());
-		transactionMapCache.put(transaction);
 
-		final Map<String, Object> result = transactionMapCache.concurrentHashMap.values()
+		transactionMapCache.insert(0, transaction);
+
+		final Statistics result = transactionMapCache.concurrentHashMap.values()
 				.stream()
-				.filter(s -> !s.isEmpty())
 				.findAny()
 				.get();
 
-		verify(this.transactionValidator, times(1)).validateTransaction(transaction);
-		Assert.assertEquals(amount, result.get("sum"));
-		Assert.assertEquals(amount, result.get("avg"));
-		Assert.assertEquals(amount, result.get("max"));
-		Assert.assertEquals(amount, result.get("min"));
-		Assert.assertEquals(1L, result.get("count"));
+		Assert.assertEquals(amount, result.getSum());
+		Assert.assertEquals(amount, result.getAvg());
+		Assert.assertEquals(amount, result.getMax());
+		Assert.assertEquals(amount, result.getMin());
+		Assert.assertEquals(1L, result.getCount().longValue());
 	}
 
 	@Test
 	public void given2ValidTransactionsWhenAreAddedToCacheThenCacheSizeShouldBeTwo() {
 		BigDecimal amount = new BigDecimal("300.00");
+		BigDecimal zero = BigDecimal.ZERO;
 		final LocalDateTime now = LocalDateTime.now();
 
 		final Transaction transaction = new Transaction(amount, now);
 		final Transaction transaction1 = new Transaction(amount, now.minusSeconds(10));
 
-		transactionMapCache.put(transaction);
-		transactionMapCache.put(transaction1);
+		transactionMapCache.insert(0, transaction);
+		transactionMapCache.insert(1, transaction1);
 
-		final List<Map<String, Object>> result = transactionMapCache.concurrentHashMap.values()
+		final List<Statistics> result = transactionMapCache.concurrentHashMap.values()
 				.stream()
-				.filter(s -> !s.isEmpty())
+				.filter(s -> s.getSum().compareTo(zero) != 0)
 				.collect(Collectors.toList());
 
-		verify(this.transactionValidator, times(1)).validateTransaction(transaction);
 		Assert.assertEquals(2, result.size());
 	}
 

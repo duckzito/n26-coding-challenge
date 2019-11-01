@@ -17,6 +17,8 @@ import java.time.LocalDateTime;
 @SpringBootTest
 @RunWith(SpringRunner.class)
 public class StatisticsServiceTest {
+	@Autowired
+	private TransactionService transactionService;
 
 	@Autowired
 	private TransactionMapCacheImpl transactionCache;
@@ -35,11 +37,11 @@ public class StatisticsServiceTest {
 
 		transactionCache.clear();
 
-		transactionCache.put(t1);
-		transactionCache.put(t2);
-		transactionCache.put(t3);
-		transactionCache.put(t4);
-		transactionCache.put(t5);
+		transactionCache.insert(0, t1);
+		transactionCache.insert(1, t2);
+		transactionCache.insert(2, t3);
+		transactionCache.insert(3, t4);
+		transactionCache.insert(4, t5);
 
 		final Statistics statistics = statisticsService.get();
 
@@ -62,13 +64,13 @@ public class StatisticsServiceTest {
 		Transaction t4 = new Transaction(new BigDecimal("700.00"), now.minusSeconds(4));
 		Transaction t5 = new Transaction(new BigDecimal("150.00"), now.minusSeconds(2));
 
-		transactionCache.clear();
+		transactionService.delete();
 
-		transactionCache.put(t1);
-		transactionCache.put(t2);
-		transactionCache.put(t3);
-		transactionCache.put(t4);
-		transactionCache.put(t5);
+		transactionService.add(t1);
+		transactionService.add(t2);
+		transactionService.add(t3);
+		transactionService.add(t4);
+		transactionService.add(t5);
 
 		final Statistics statistics = statisticsService.get();
 
@@ -90,12 +92,12 @@ public class StatisticsServiceTest {
 		Transaction t4 = new Transaction(new BigDecimal("700.00"), now.plusSeconds(4));
 		Transaction t5 = new Transaction(new BigDecimal("150.00"), now.plusSeconds(2));
 
-		transactionCache.clear();
+		transactionService.delete();
 
-		transactionCache.put(t1);
-		transactionCache.put(t2);
-		transactionCache.put(t3);
-		transactionCache.put(t4);
-		transactionCache.put(t5);
+		transactionService.add(t1);
+		transactionService.add(t2);
+		transactionService.add(t3);
+		transactionService.add(t4);
+		transactionService.add(t5);
 	}
 }

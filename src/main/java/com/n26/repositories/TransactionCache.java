@@ -9,9 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Cache interface
  */
 public interface TransactionCache {
-	void put(Transaction transaction);
-
+	void update(int position, Statistics statistics, Transaction transaction);
+	void insert(int position, Transaction transaction);
 	void clear();
-
-	Statistics get();
 }
